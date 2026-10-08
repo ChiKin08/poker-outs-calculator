@@ -209,6 +209,34 @@
     <div id="insuranceArea"><div class="placeholder">等待上方 Outs 结果…</div></div>
   </div>
 
+  <!-- ④ Outs ↔ 赔率对照表（可折叠） -->
+  <div class="card">
+    <h2><span class="chip">4</span>Outs ↔ 赔率对照表</h2>
+    <details>
+      <summary style="font-size:13px;color:var(--accent)">📋 点我展开 / 折叠完整对照表（1~15 outs）</summary>
+      <table style="margin-top:12px;font-size:13px">
+        <thead><tr><th style="text-align:center">Outs</th><th>赔率</th><th>翻牌后(剩45)</th><th>转牌后(剩44)</th><th>典型牌型</th></tr></thead>
+        <tbody>
+          <tr><td style="text-align:center">1</td><td class="premium">1 : 30</td><td class="dim">2.2%</td><td class="dim">2.3%</td><td class="dim">两对追单张A</td></tr>
+          <tr><td style="text-align:center">2</td><td class="premium">1 : 15</td><td class="dim">4.4%</td><td class="dim">4.5%</td><td class="dim">口袋对追 set</td></tr>
+          <tr><td style="text-align:center">3</td><td class="premium">1 : 10</td><td class="dim">6.7%</td><td class="dim">6.8%</td><td class="dim">抽顺/抽花+</td></tr>
+          <tr><td style="text-align:center">4</td><td class="premium">1 : 8</td><td class="dim">8.9%</td><td class="dim">9.1%</td><td class="dim">卡顺（内嵌顺）</td></tr>
+          <tr><td style="text-align:center">5</td><td class="premium">1 : 6</td><td class="dim">11.1%</td><td class="dim">11.4%</td><td class="dim">抽一对+</td></tr>
+          <tr><td style="text-align:center">6</td><td class="premium">1 : 5</td><td class="dim">13.3%</td><td class="dim">13.6%</td><td class="dim">抽两对+</td></tr>
+          <tr><td style="text-align:center">7</td><td class="premium">1 : 4</td><td class="dim">15.6%</td><td class="dim">15.9%</td><td class="dim">抽两对/卡+</td></tr>
+          <tr><td style="text-align:center">8</td><td class="premium">1 : 3.5</td><td class="dim">17.8%</td><td class="dim">18.2%</td><td class="dim">两头顺</td></tr>
+          <tr><td style="text-align:center">9</td><td class="premium">1 : 2.8</td><td class="dim">20.0%</td><td class="dim">20.5%</td><td class="dim">同花听牌</td></tr>
+          <tr><td style="text-align:center">10</td><td class="premium">1 : 2.5</td><td class="dim">22.2%</td><td class="dim">22.7%</td><td class="dim">同花 + 卡顺</td></tr>
+          <tr><td style="text-align:center">11</td><td class="premium">1 : 2.2</td><td class="dim">24.4%</td><td class="dim">25.0%</td><td class="dim">—</td></tr>
+          <tr><td style="text-align:center">12</td><td class="premium">1 : 2</td><td class="dim">26.7%</td><td class="dim">27.3%</td><td class="dim">同花 + 卡顺</td></tr>
+          <tr><td style="text-align:center">13</td><td class="premium">1 : 1.8</td><td class="dim">28.9%</td><td class="dim">29.5%</td><td class="dim">同花 + 内嵌+</td></tr>
+          <tr><td style="text-align:center">14</td><td class="premium">1 : 1.6</td><td class="dim">31.1%</td><td class="dim">31.8%</td><td class="dim">同花 + 单高张</td></tr>
+          <tr><td style="text-align:center">15</td><td class="premium">1 : 1.4</td><td class="dim">33.3%</td><td class="dim">34.1%</td><td class="dim">同花 + 两头顺</td></tr>
+        </tbody>
+      </table>
+    </details>
+  </div>
+
   <footer>
     Outs = 下一张牌能让你获胜的剩余牌数 · 牌力按标准 7 张牌型评估<br>
     保险为 -EV 工具，仅用于控制波动
@@ -421,6 +449,19 @@ function renderInsurance(myOuts, oppOuts, remainN, heroBehind) {
         <input id="pot2" type="number" min="0" step="any" value="10000">
       </div>
     </div>
+    <div class="field-row">
+      <div class="field">
+        <label>本金来源</label>
+        <select id="srcMode">
+          <option value="half" selected>1/2 Pot</option>
+          <option value="manual">手动输入</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>手动本金（选「手动输入」时生效）</label>
+        <input id="manualPrincipal" type="number" min="0" step="any" value="5000" disabled>
+      </div>
+    </div>
     <div id="oddsInfo" style="margin-bottom:12px"></div>
     <table>
       <thead><tr><th>理赔目标</th><th>需购买保费</th><th>爆保险（获赔）</th><th>不爆保险（收益）</th></tr></thead>
@@ -429,6 +470,10 @@ function renderInsurance(myOuts, oppOuts, remainN, heroBehind) {
   const upd = () => {
     const outs = $("persp").value === "opp" ? oppOuts : myOuts;
     const pot = +$("pot2").value || 0;
+    const mode = $("srcMode").value;
+    const manual = +$("manualPrincipal").value || 0;
+    $("manualPrincipal").disabled = mode !== "manual";
+    const principal = mode === "half" ? pot / 2 : manual;
     const info = $("oddsInfo"), body = $("insBody");
     if (outs < 1 || outs > 15) {
       info.innerHTML = `<div class="placeholder">Outs = ${outs}，超出保险赔率表范围（1~15）</div>`;
@@ -440,6 +485,8 @@ function renderInsurance(myOuts, oppOuts, remainN, heroBehind) {
       ["100% Pot", pot, false],
       ["75% Pot", pot * 0.75, false],
       ["无差异点（爆=不爆）", pot * odds / (odds + 1), true],
+      ["保本（100% 本金）", principal, false],
+      ["1/2 本金", principal / 2, false],
       ["50% Pot", pot * 0.5, false],
     ];
     body.innerHTML = rows.map(([name, target, lock]) => {
@@ -452,6 +499,7 @@ function renderInsurance(myOuts, oppOuts, remainN, heroBehind) {
     }).join("");
   };
   $("persp").oninput = upd; $("pot2").oninput = upd;
+  $("srcMode").oninput = upd; $("manualPrincipal").oninput = upd;
   upd();
 }
 
