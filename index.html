@@ -47,6 +47,12 @@
   /* 牌槽区 */
   .slot-group { margin-bottom: 14px; }
   .slot-group .lbl { font-size: 13px; opacity: .85; margin-bottom: 8px; }
+  /* 胜率徽章 */
+  .equity { font-size: 12px; font-weight: 700; margin-left: 8px; padding: 2px 9px; border-radius: 9px; opacity: 1; letter-spacing: .5px; }
+  .equity:empty { display: none; }
+  .equity.win  { color: var(--gain);   background: rgba(61,220,151,.14); border: 1px solid rgba(61,220,151,.35); }
+  .equity.lose { color: #f87171;       background: rgba(248,113,113,.12); border: 1px solid rgba(248,113,113,.35); }
+  .equity.tie  { color: var(--accent-dim); background: rgba(255,184,119,.12); border: 1px solid rgba(255,184,119,.35); }
   .slots { display: flex; gap: 8px; flex-wrap: wrap; }
   .slot {
     width: 52px; height: 72px; border-radius: 8px; cursor: pointer;
@@ -180,11 +186,11 @@
   <div class="card">
     <h2><span class="chip">1</span>选择牌面（先点牌槽，再点下面的牌）</h2>
     <div class="slot-group">
-      <div class="lbl">🧑 你的手牌</div>
+      <div class="lbl">🧑 你的手牌<span class="equity" id="heroEq"></span></div>
       <div class="slots" id="heroSlots"></div>
     </div>
     <div class="slot-group">
-      <div class="lbl">🎭 对手手牌</div>
+      <div class="lbl">🎭 对手手牌<span class="equity" id="villainEq"></span></div>
       <div class="slots" id="villainSlots"></div>
     </div>
     <div class="slot-group">
@@ -378,7 +384,51 @@ $("clearBtn").onclick = () => {
 const ODDS = {1:30, 2:15, 3:10, 4:8, 5:6, 6:5, 7:4, 8:3.5, 9:2.8, 10:2.5,
               11:2.2, 12:2, 13:1.8, 14:1.6, 15:1.4};
 
+// ================= 双方胜率（equity，枚举所有补牌） =================
+function calcEquity(hero, villain, board) {
+  const used = new Set([...hero, ...villain, ...board]);
+  const remain = [];
+  for (let c = 0; c < 52; c++) if (!used.has(c)) remain.push(c);
+  if (board.length === 5) {   // 河牌已发完，直接判定
+    const sA = evalBest([...hero, ...board]), sB = evalBest([...villain, ...board]);
+    return sA > sB ? 100 : sA < sB ? 0 : 50;
+  }
+  let win = 0, tie = 0, total = 0;
+  const score = nb => {
+    const sA = evalBest([...hero, ...nb]), sB = evalBest([...villain, ...nb]);
+    if (sA > sB) win++; else if (sA === sB) tie++;
+    total++;
+  };
+  if (board.length === 4) {          // 转牌：枚举最后 1 张
+    for (const c of remain) score([...board, c]);
+  } else {                            // 翻牌：枚举剩余 2 张组合
+    for (let i = 0; i < remain.length; i++)
+      for (let j = i + 1; j < remain.length; j++)
+        score([...board, remain[i], remain[j]]);
+  }
+  return (win + tie / 2) / total * 100;   // 你的 equity（%），对手 = 100 - 此值
+}
+
+function updateEquity() {
+  const hero = state.hero.filter(c => c !== null);
+  const villain = state.villain.filter(c => c !== null);
+  const board = state.board.filter(c => c !== null);
+  const hEl = $("heroEq"), vEl = $("villainEq");
+  if (hero.length < 2 || villain.length < 2 || board.length < 3) {
+    hEl.textContent = ""; vEl.textContent = "";
+    return;
+  }
+  const heroEq = calcEquity(hero, villain, board);
+  const villainEq = 100 - heroEq;
+  const cls = (a, b) => "equity " + (a - b > 0.05 ? "win" : b - a > 0.05 ? "lose" : "tie");
+  hEl.textContent = `胜率 ${heroEq.toFixed(1)}%`;
+  vEl.textContent = `胜率 ${villainEq.toFixed(1)}%`;
+  hEl.className = cls(heroEq, villainEq);
+  vEl.className = cls(villainEq, heroEq);
+}
+
 function compute() {
+  updateEquity();
   const hero = state.hero.filter(c => c !== null);
   const villain = state.villain.filter(c => c !== null);
   const board = state.board.filter(c => c !== null);
