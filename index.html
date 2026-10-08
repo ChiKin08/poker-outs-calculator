@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>德州扑克 Outs 计算器</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    --bg: radial-gradient(ellipse at 50% 30%, #241610 0%, #17100b 55%, #0c0806 100%);
+    --text: #f2e8df; --card-bg: rgba(34,23,16,.82); --card-border: rgba(243,112,33,.30);
+    --accent: #f37021; --accent-dim: #ffb877; --input-border: rgba(243,112,33,.40);
+    --option-bg: #241610; --hover: rgba(243,112,33,.10);
+    --premium: #ff8c42; --gain: #3ddc97; --badge-bg: #f37021; --badge-text: #1a0f08;
+    font-family: "PingFang SC", "Microsoft YaHei", -apple-system, sans-serif;
+    min-height: 100vh; background: var(--bg); color: var(--text);
+    padding: 24px 14px 60px;
+  }
+  /* 商务感模糊背景图（加载失败时自动退回纯色渐变） */
+  body::before {
+    content: ""; position: fixed; inset: -30px; z-index: -1;
+    background: url("https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=1920&auto=format&fit=crop") center/cover no-repeat;
+    filter: blur(14px) brightness(.32) saturate(.85);
+  }
+  .wrap { max-width: 760px; margin: 0 auto; }
+
+  header { text-align: center; margin-bottom: 22px; }
+  header h1 { font-size: 26px; letter-spacing: 2px; color: var(--accent); text-shadow: 0 2px 8px rgba(0,0,0,.5); }
+  header p { font-size: 13px; opacity: .75; margin-top: 6px; }
+
+  .card {
+    background: var(--card-bg); border: 1px solid var(--card-border);
+    border-radius: 16px; padding: 18px 18px 20px; margin-bottom: 18px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.35); backdrop-filter: blur(4px);
+  }
+  .card h2 {
+    font-size: 15px; color: var(--accent); letter-spacing: 1px;
+    margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
+  }
+  .card h2 .chip {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: #c33; color: #fff; font-size: 12px; font-weight: 700;
+    box-shadow: inset 0 0 0 3px #fff3, 0 2px 4px rgba(0,0,0,.4);
+  }
+
+  /* 牌槽区 */
+  .slot-group { margin-bottom: 14px; }
+  .slot-group .lbl { font-size: 13px; opacity: .85; margin-bottom: 8px; }
+  .slots { display: flex; gap: 8px; flex-wrap: wrap; }
+  .slot {
+    width: 52px; height: 72px; border-radius: 8px; cursor: pointer;
+    border: 2px dashed rgba(243,112,33,.4); background: rgba(0,0,0,.3);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-size: 20px; font-weight: 700; transition: all .15s; position: relative;
+  }
+  .slot.active { border-color: var(--premium); border-style: solid; box-shadow: 0 0 10px rgba(243,112,33,.5); }
+  .slot.filled { border-style: solid; border-color: rgba(255,255,255,.4); background: #f4f6f8; }
+  .slot .rk { line-height: 1.1; }
+  .slot .st { font-size: 22px; line-height: 1.1; }
+  .slot.filled .rm {
+    position: absolute; top: -7px; right: -7px; width: 18px; height: 18px;
+    border-radius: 50%; background: #c33; color: #fff; font-size: 11px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .s0 { color: #1e293b; } .s1 { color: #dc2626; } .s2 { color: #2563eb; } .s3 { color: #16a34a; }
+
+  /* 牌桌选牌区 */
+  .deck-row { display: grid; grid-template-columns: repeat(13, 1fr); gap: 4px; margin-bottom: 4px; }
+  .deck-card {
+    aspect-ratio: 5/7; border-radius: 5px; cursor: pointer; border: 1px solid rgba(255,255,255,.15);
+    background: rgba(255,255,255,.06); display: flex; flex-direction: column;
+    align-items: center; justify-content: center; font-size: 12px; font-weight: 700;
+    transition: all .12s; padding: 0; color: var(--text);
+  }
+  .deck-card .st { font-size: 13px; }
+  .deck-card:hover:not(:disabled) { background: rgba(243,112,33,.30); transform: translateY(-2px); }
+  .deck-card:disabled { opacity: .15; cursor: not-allowed; }
+  .deck-card.s0 { color: #cbd5e1; } .deck-card.s1 { color: #f87171; }
+  .deck-card.s2 { color: #60a5fa; } .deck-card.s3 { color: #4ade80; }
+
+  .btn-row { display: flex; gap: 10px; margin-top: 14px; }
+  .btn {
+    padding: 9px 18px; border-radius: 10px; border: 1px solid var(--card-border);
+    background: transparent; color: var(--text); font-size: 13px; cursor: pointer; letter-spacing: 1px;
+  }
+  .btn.primary { background: var(--accent); color: var(--badge-text); font-weight: 700; border-color: var(--accent); }
+
+  /* 结果区 */
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+  .stat {
+    background: rgba(0,0,0,.3); border-radius: 12px; padding: 12px 8px;
+    text-align: center; border: 1px solid rgba(255,255,255,.08);
+  }
+  .stat .v { font-size: 22px; font-weight: 700; }
+  .stat .k { font-size: 12px; opacity: .7; margin-top: 4px; }
+  .stat.win .v { color: var(--gain); } .stat.tie .v { color: var(--accent-dim); } .stat.lose .v { color: #f87171; }
+
+  .situation { text-align: center; font-size: 15px; margin-bottom: 14px; letter-spacing: 1px; }
+  .situation b { color: var(--accent); }
+
+  .outs-display { display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; margin-top: 10px; }
+  .mini-card {
+    width: 34px; height: 46px; border-radius: 5px; background: #f4f6f8;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; border: 1px solid rgba(0,0,0,.2);
+  }
+  .mini-card .st { font-size: 14px; }
+
+  /* 保费表 */
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 13px; opacity: .85; margin-bottom: 6px; }
+  .field input, .field select {
+    width: 100%; padding: 11px 12px; font-size: 16px; border-radius: 10px;
+    border: 1px solid var(--input-border); background: rgba(0,0,0,.35);
+    color: var(--accent-dim); outline: none;
+  }
+  .field select option { background: var(--option-bg); color: var(--accent-dim); }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 10px 8px; text-align: right; border-bottom: 1px solid rgba(255,255,255,.08); }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { color: var(--accent); font-size: 13px; letter-spacing: 1px; }
+  td.premium { color: var(--premium); font-weight: 700; font-size: 15px; }
+  td.gain { color: var(--gain); font-weight: 700; font-size: 15px; }
+  td.dim { opacity: .65; font-size: 13px; }
+  .lock-row { background: var(--hover); }
+  .lock-row td:first-child { color: var(--premium); font-weight: 700; }
+  .best::after {
+    content: attr(data-badge); font-size: 10px; color: var(--badge-text); background: var(--badge-bg);
+    border-radius: 6px; padding: 1px 6px; margin-left: 6px; vertical-align: 2px; white-space: nowrap;
+  }
+
+  .placeholder { text-align: center; opacity: .5; font-size: 14px; padding: 20px 0; line-height: 2; }
+  footer { text-align: center; font-size: 12px; opacity: .55; margin-top: 8px; line-height: 1.8; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>♠ 德州扑克 Outs 计算器 ♥</h1>
+    <p>选好双方手牌和公共牌，自动算出 Outs 并联动保险保费</p>
+  </header>
+
+  <!-- ① 选牌 -->
+  <div class="card">
+    <h2><span class="chip">1</span>选择牌面（先点牌槽，再点下面的牌）</h2>
+    <div class="slot-group">
+      <div class="lbl">🧑 你的手牌</div>
+      <div class="slots" id="heroSlots"></div>
+    </div>
+    <div class="slot-group">
+      <div class="lbl">🎭 对手手牌</div>
+      <div class="slots" id="villainSlots"></div>
+    </div>
+    <div class="slot-group">
+      <div class="lbl">🃏 公共牌（3~5 张）</div>
+      <div class="slots" id="boardSlots"></div>
+    </div>
+    <div id="deck"></div>
+    <div class="btn-row">
+      <button class="btn" id="clearBtn">🗑 清空重选</button>
+    </div>
+  </div>
+
+  <!-- ② 结果 -->
+  <div class="card">
+    <h2><span class="chip">2</span>Outs 计算结果（下一张牌）</h2>
+    <div id="resultArea"><div class="placeholder">选好双方手牌 + 至少 3 张公共牌后<br>自动计算</div></div>
+  </div>
+
+  <!-- ③ 保费计算 -->
+  <div class="card">
+    <h2><span class="chip">3</span>保险保费计算</h2>
+    <div id="insuranceArea"><div class="placeholder">等待上方 Outs 结果…</div></div>
+  </div>
+
+  <footer>
+    Outs = 下一张牌能让你获胜的剩余牌数 · 牌力按标准 7 张牌型评估<br>
+    保险为 -EV 工具，仅用于控制波动
+  </footer>
+</div>
+
+<script>
+// ================= 牌与牌型评估 =================
+const RANKS = "23456789TJQKA";           // index+2 = 牌力
+const SUITS = ["♠", "♥", "♦", "♣"];       // 0黑桃 1红桃 2方块 3梅花
+const cid = (r, s) => s * 13 + (r - 2);   // r:2-14, s:0-3 → 0-51
+const cRank = c => c % 13 + 2;
+const cSuit = c => Math.floor(c / 13);
+const cName = c => RANKS[cRank(c) - 2];
+
+function eval5(cards) {
+  const cnt = new Array(15).fill(0);
+  let flush = true;
+  cards.forEach((c, i) => { cnt[cRank(c)]++; if (i && cSuit(c) !== cSuit(cards[0])) flush = false; });
+  const uniq = [...new Set(cards.map(cRank))].sort((a, b) => b - a);
+  let stHi = 0;
+  if (uniq.length === 5) {
+    if (uniq[0] - uniq[4] === 4) stHi = uniq[0];
+    else if (uniq[0] === 14 && uniq[1] === 5) stHi = 5;
+  }
+  const groups = [];
+  for (let r = 14; r >= 2; r--) if (cnt[r]) groups.push([cnt[r], r]);
+  groups.sort((a, b) => b[0] - a[0] || b[1] - a[1]);
+  const sortedRanks = cards.map(cRank).sort((a, b) => b - a);
+  let cat, tb;
+  if (flush && stHi) { cat = 8; tb = [stHi]; }
+  else if (groups[0][0] === 4) { cat = 7; tb = [groups[0][1], groups[1][1]]; }
+  else if (groups[0][0] === 3 && groups[1][0] === 2) { cat = 6; tb = [groups[0][1], groups[1][1]]; }
+  else if (flush) { cat = 5; tb = sortedRanks; }
+  else if (stHi) { cat = 4; tb = [stHi]; }
+  else if (groups[0][0] === 3) { cat = 3; tb = groups.map(g => g[1]); }
+  else if (groups[0][0] === 2 && groups[1][0] === 2) { cat = 2; tb = [groups[0][1], groups[1][1], groups[2][1]]; }
+  else if (groups[0][0] === 2) { cat = 1; tb = groups.map(g => g[1]); }
+  else { cat = 0; tb = sortedRanks; }
+  while (tb.length < 5) tb.push(0);   // 统一补齐 5 位，保证跨牌型可比较
+  let score = cat;
+  for (const v of tb) score = score * 15 + v;
+  return score;
+}
+
+function evalBest(cards) {   // 5~7 张牌，取最优 5 张组合
+  let best = -1;
+  const n = cards.length;
+  for (let a = 0; a < n - 4; a++) for (let b = a + 1; b < n - 3; b++) for (let c = b + 1; c < n - 2; c++)
+    for (let d = c + 1; d < n - 1; d++) for (let e = d + 1; e < n; e++) {
+      const s = eval5([cards[a], cards[b], cards[c], cards[d], cards[e]]);
+      if (s > best) best = s;
+    }
+  return best;
+}
+
+// ================= 选牌 UI =================
+const state = { hero: [null, null], villain: [null, null], board: [null, null, null, null, null], active: null };
+const $ = id => document.getElementById(id);
+
+function slotEl(group, idx) {
+  const d = document.createElement("div");
+  d.className = "slot"; d.dataset.group = group; d.dataset.idx = idx;
+  d.innerHTML = `<span style="opacity:.3;font-size:12px">+</span>`;
+  d.onclick = () => {
+    if (state[group][idx] !== null) {          // 已有牌 → 点右上角×删除；点槽位本身也删
+      state[group][idx] = null; render(); return;
+    }
+    document.querySelectorAll(".slot").forEach(s => s.classList.remove("active"));
+    d.classList.add("active");
+    state.active = { group, idx };
+  };
+  return d;
+}
+
+function render() {
+  const used = new Set();
+  ["hero", "villain", "board"].forEach(g => state[g].forEach(c => c !== null && used.add(c)));
+
+  [["heroSlots", "hero"], ["villainSlots", "villain"], ["boardSlots", "board"]].forEach(([elId, g]) => {
+    const box = $(elId); box.innerHTML = "";
+    state[g].forEach((c, i) => {
+      const s = slotEl(g, i);
+      if (state.active && state.active.group === g && state.active.idx === i) s.classList.add("active");
+      if (c !== null) {
+        s.classList.add("filled");
+        s.innerHTML = `<span class="rk s${cSuit(c)}">${cName(c)}</span><span class="st s${cSuit(c)}">${SUITS[cSuit(c)]}</span><span class="rm">×</span>`;
+      }
+      box.appendChild(s);
+    });
+  });
+
+  // 牌桌
+  const deck = $("deck"); deck.innerHTML = "";
+  for (let s = 0; s < 4; s++) {
+    const row = document.createElement("div"); row.className = "deck-row";
+    for (let r = 14; r >= 2; r--) {
+      const c = cid(r, s);
+      const b = document.createElement("button");
+      b.className = `deck-card s${s}`;
+      b.innerHTML = `<span class="rk">${cName(c)}</span><span class="st">${SUITS[s]}</span>`;
+      b.disabled = used.has(c);
+      b.onclick = () => pickCard(c);
+      row.appendChild(b);
+    }
+    deck.appendChild(row);
+  }
+  compute();
+}
+
+function pickCard(c) {
+  let target = state.active;
+  if (!target || state[target.group][target.idx] !== null) {
+    target = null;
+    // 自动找下一个空槽：hero → villain → board
+    outer: for (const g of ["hero", "villain", "board"]) {
+      for (let i = 0; i < state[g].length; i++)
+        if (state[g][i] === null) { target = { group: g, idx: i }; break outer; }
+    }
+  }
+  if (!target) return;
+  state[target.group][target.idx] = c;
+  // 激活下一个空槽
+  state.active = null;
+  outer: for (const g of ["hero", "villain", "board"]) {
+    for (let i = 0; i < state[g].length; i++)
+      if (state[g][i] === null) { state.active = { group: g, idx: i }; break outer; }
+  }
+  render();
+}
+
+$("clearBtn").onclick = () => {
+  state.hero = [null, null]; state.villain = [null, null];
+  state.board = [null, null, null, null, null]; state.active = null;
+  render();
+};
+
+// ================= Outs 计算 =================
+const ODDS = {1:30, 2:15, 3:10, 4:8, 5:6, 6:5, 7:4, 8:3.5, 9:2.8, 10:2.5,
+              11:2.2, 12:2, 13:1.8, 14:1.6, 15:1.4};
+
+function compute() {
+  const hero = state.hero.filter(c => c !== null);
+  const villain = state.villain.filter(c => c !== null);
+  const board = state.board.filter(c => c !== null);
+  const res = $("resultArea"), ins = $("insuranceArea");
+
+  if (hero.length < 2 || villain.length < 2 || board.length < 3) {
+    res.innerHTML = `<div class="placeholder">选好双方手牌 + 至少 3 张公共牌后<br>自动计算</div>`;
+    ins.innerHTML = `<div class="placeholder">等待上方 Outs 结果…</div>`;
+    return;
+  }
+
+  const used = new Set([...hero, ...villain, ...board]);
+  const remain = [];
+  for (let c = 0; c < 52; c++) if (!used.has(c)) remain.push(c);
+
+  if (board.length === 5) {   // 河牌已发完，直接判定
+    const sA = evalBest([...hero, ...board]), sB = evalBest([...villain, ...board]);
+    const msg = sA > sB ? "🏆 你获胜" : sA < sB ? "😞 对手获胜" : "🤝 平分秋色";
+    res.innerHTML = `<div class="situation">公共牌已发满 5 张，最终结果：<b>${msg}</b></div>`;
+    ins.innerHTML = `<div class="placeholder">牌局已结束，无需保险</div>`;
+    return;
+  }
+
+  const winCards = [], tieCards = [], loseCards = [];
+  remain.forEach(c => {
+    const nb = [...board, c];
+    const sA = evalBest([...hero, ...nb]), sB = evalBest([...villain, ...nb]);
+    if (sA > sB) winCards.push(c); else if (sA === sB) tieCards.push(c); else loseCards.push(c);
+  });
+  const n = remain.length;
+  const pct = x => (x / n * 100).toFixed(1) + "%";
+  const nowA = evalBest([...hero, ...board]), nowB = evalBest([...villain, ...board]);
+  const nowMsg = nowA > nowB ? "当前你 <b>领先</b>" : nowA < nowB ? "当前你 <b>落后</b>" : "当前双方 <b>持平</b>";
+
+  const miniCard = c => `<div class="mini-card"><span class="rk s${cSuit(c)}">${cName(c)}</span><span class="st s${cSuit(c)}">${SUITS[cSuit(c)]}</span></div>`;
+
+  res.innerHTML = `
+    <div class="situation">${nowMsg} · 剩余 ${n} 张未知牌</div>
+    <div class="stats">
+      <div class="stat win"><div class="v">${winCards.length} 张</div><div class="k">你的 Outs（赢）${pct(winCards.length)}</div></div>
+      <div class="stat tie"><div class="v">${tieCards.length} 张</div><div class="k">平分 ${pct(tieCards.length)}</div></div>
+      <div class="stat lose"><div class="v">${loseCards.length} 张</div><div class="k">对手 Outs（赢）${pct(loseCards.length)}</div></div>
+    </div>
+    ${winCards.length ? `<div style="text-align:center;font-size:13px;opacity:.8">你的 Outs 是这些牌：</div>
+    <div class="outs-display">${winCards.map(miniCard).join("")}</div>` : ""}
+    ${loseCards.length ? `<div style="text-align:center;font-size:13px;opacity:.8;margin-top:10px">对手的 Outs 是这些牌：</div>
+    <div class="outs-display">${loseCards.map(miniCard).join("")}</div>` : ""}`;
+
+  renderInsurance(winCards.length, loseCards.length, n, nowA < nowB);
+}
+
+// ================= 保险保费 =================
+const fmt = x => (!isFinite(x) || x < 0) ? "-" : x.toLocaleString("zh-CN", { maximumFractionDigits: 2 });
+
+function renderInsurance(myOuts, oppOuts, remainN, heroBehind) {
+  const ins = $("insuranceArea");
+  ins.innerHTML = `
+    <div class="field-row">
+      <div class="field">
+        <label>保险视角（默认落后方的 Outs）</label>
+        <select id="persp">
+          <option value="opp" ${heroBehind ? "" : "selected"}>对手 Outs（对手落后，追牌）${oppOuts} 张</option>
+          <option value="my" ${heroBehind ? "selected" : ""}>你的 Outs（你落后，追牌）${myOuts} 张</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>底池 Pot</label>
+        <input id="pot2" type="number" min="0" step="any" value="10000">
+      </div>
+    </div>
+    <div id="oddsInfo" style="margin-bottom:12px"></div>
+    <table>
+      <thead><tr><th>理赔目标</th><th>需购买保费</th><th>爆保险（获赔）</th><th>不爆保险（收益）</th></tr></thead>
+      <tbody id="insBody"></tbody>
+    </table>`;
+  const upd = () => {
+    const outs = $("persp").value === "opp" ? oppOuts : myOuts;
+    const pot = +$("pot2").value || 0;
+    const info = $("oddsInfo"), body = $("insBody");
+    if (outs < 1 || outs > 15) {
+      info.innerHTML = `<div class="placeholder">Outs = ${outs}，超出保险赔率表范围（1~15）</div>`;
+      body.innerHTML = ""; return;
+    }
+    const odds = ODDS[outs];
+    info.innerHTML = `<div style="text-align:center;font-size:15px">Outs <b style="color:var(--premium)">${outs}</b> 张 → 赔率 <b style="color:var(--premium)">1 : ${odds}</b> · 爆保险概率 <b style="color:var(--accent)">${(outs / remainN * 100).toFixed(1)}%</b></div>`;
+    const rows = [
+      ["100% Pot", pot, false],
+      ["75% Pot", pot * 0.75, false],
+      ["无差异点（爆=不爆）", pot * odds / (odds + 1), true],
+      ["50% Pot", pot * 0.5, false],
+    ];
+    body.innerHTML = rows.map(([name, target, lock]) => {
+      const premium = target / odds, gain = pot - premium;
+      return `<tr class="${lock ? "lock-row" : ""}">
+        <td ${lock ? 'class="best" data-badge="锁收益"' : ""}>${name}</td>
+        <td class="premium">${fmt(premium)}</td>
+        <td class="dim">${fmt(target)}</td>
+        <td class="gain">${fmt(gain)}</td></tr>`;
+    }).join("");
+  };
+  $("persp").oninput = upd; $("pot2").oninput = upd;
+  upd();
+}
+
+render();
+</script>
+</body>
+</html>
